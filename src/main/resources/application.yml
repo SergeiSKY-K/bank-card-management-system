@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/bankcards_db
+    username: bankcards_user
+    password: bankcards_password
+    driver-class-name: org.postgresql.Driver
+
+jpa:
+    hibernate:
+    ddl-auto: validate
+    show-sql: true
+
+liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+logging:
+  level:
+    liquibase: INFO
+
+server:
+  port: 8080
+
+
+jwt:
+  secret: "9b5f8c7a1e3d4f6b8a2c9d7e5f1a3b6c8d2e4f7a9b1c3d5e7f8a2b4c6d9e1f3"
+  expiration: 3600000
