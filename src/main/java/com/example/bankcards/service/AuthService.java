@@ -31,7 +31,10 @@ public class AuthService {
 
         String token = jwtService.generateToken(user.getUsername());
 
-        return new AuthResponseDto(token);
+        return new AuthResponseDto(
+                token,
+                user.getId()
+        );
     }
 
     public AuthResponseDto login(AuthRequestDto request) {
@@ -45,6 +48,9 @@ public class AuthService {
         String token = jwtService.generateToken(user.getUsername());
         System.out.println("User id = " + user.getId());
         System.out.println("User role = " + user.getRole());
-        return new AuthResponseDto(token);
+        return new AuthResponseDto(
+                token,
+                user.getId()
+        );
     }
 }

@@ -3,15 +3,20 @@ package com.example.bankcards.service;
 import com.example.bankcards.dto.CardMapper;
 import com.example.bankcards.dto.CardResponseDto;
 import com.example.bankcards.dto.CreateCardRequestDto;
+import com.example.bankcards.dto.TransferRequestDto;
 import com.example.bankcards.entity.Card;
 import com.example.bankcards.entity.User;
 import com.example.bankcards.enums.CardStatus;
+import com.example.bankcards.exceptions.*;
 import com.example.bankcards.repository.CardRepository;
 import com.example.bankcards.repository.UserRepository;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDate;
 
 @Service
 @RequiredArgsConstructor
@@ -25,7 +30,7 @@ public class CardService {
     public CardResponseDto createCard(CreateCardRequestDto request) {
 
         User user = userRepository.findById(request.userId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
 
         String encryptedCardNumber =
                 cardEncryptionService.encrypt(request.cardNumber());
@@ -62,14 +67,14 @@ public class CardService {
     }
     public Page<CardResponseDto> getMyCards(String username, Pageable pageable) {
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
 
         return cardRepository.findByUser(user, pageable)
                 .map(cardMapper::toDto);
     }
     public CardResponseDto blockCard(Long cardId) {
         Card card = cardRepository.findById(cardId)
-                .orElseThrow(() -> new RuntimeException("Card not found"));
+                .orElseThrow(() -> new CardNotFoundException("Card not found"));
 
         card.setStatus(CardStatus.BLOCKED);
 
@@ -80,7 +85,7 @@ public class CardService {
 
     public CardResponseDto activateCard(Long cardId) {
         Card card = cardRepository.findById(cardId)
-                .orElseThrow(() -> new RuntimeException("Card not found"));
+                .orElseThrow(() -> new CardNotFoundException("Card not found"));
 
         card.setStatus(CardStatus.ACTIVE);
 
@@ -90,10 +95,73 @@ public class CardService {
     }
     public void deleteCard(Long id) {
         if (!cardRepository.existsById(id)) {
-            throw new RuntimeException("Card not found");
+            throw new CardNotFoundException("Card not found");
         }
 
         cardRepository.deleteById(id);
+    }
+
+    @Transactional
+    public CardResponseDto transfer(String username, TransferRequestDto request) {
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+
+        Card fromCard = cardRepository.findById(request.getFromCardId())
+                .orElseThrow(() -> new CardNotFoundException("Card not found"));
+
+        Card toCard = cardRepository.findById(request.getToCardId())
+                .orElseThrow(() -> new CardNotFoundException("Card not found"));
+
+        if (fromCard.getId().equals(toCard.getId())) {
+            throw new SameCardTransferException("Cannot transfer to the same card");
+        }
+
+        if (!fromCard.getUser().getId().equals(user.getId())
+                || !toCard.getUser().getId().equals(user.getId())) {
+            throw new AccessDeniedException("Access denied");
+        }
+
+        if (fromCard.getStatus() != CardStatus.ACTIVE
+                || toCard.getStatus() != CardStatus.ACTIVE) {
+            throw new CardBlockedException("Card blocked");
+        }
+
+        if (fromCard.getExpirationDate().isBefore(LocalDate.now())
+                || toCard.getExpirationDate().isBefore(LocalDate.now())) {
+            throw new CardExpiredException("Card expired");
+        }
+
+        if (fromCard.getBalance().compareTo(request.getAmount()) < 0) {
+            throw new InsufficientFundsException("Insufficient funds");
+        }
+
+        fromCard.setBalance(fromCard.getBalance().subtract(request.getAmount()));
+        toCard.setBalance(toCard.getBalance().add(request.getAmount()));
+
+        cardRepository.save(fromCard);
+        Card savedToCard = cardRepository.save(toCard);
+
+        return cardMapper.toDto(savedToCard);
+    }
+
+    public CardResponseDto requestBlockCard(String username, Long cardId) {
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+
+        Card card = cardRepository.findById(cardId)
+                .orElseThrow(() -> new CardNotFoundException("Card not found"));
+
+        if (!card.getUser().getId().equals(user.getId())) {
+            throw new AccessDeniedException("Access denied");
+        }
+
+        card.setStatus(CardStatus.BLOCKED);
+
+        Card savedCard = cardRepository.save(card);
+
+        return cardMapper.toDto(savedCard);
     }
 
 }
