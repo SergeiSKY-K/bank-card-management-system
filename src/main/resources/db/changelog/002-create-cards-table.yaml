@@ -3,6 +3,13 @@ databaseChangeLog:
       id: 002-create-cards-table
       author: sergei
 
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: cards
+
       changes:
         - createTable:
             tableName: cards
